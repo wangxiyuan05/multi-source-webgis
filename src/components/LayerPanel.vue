@@ -37,8 +37,14 @@ onUnmounted(() => {
 })
 
 watch(spectral, (data) => {
+  // 确保 chart 绑定到当前 DOM（v-if 切换后 ref 可能会变）
+  if (!chart && chartContainer.value) {
+    chart = echarts.init(chartContainer.value, undefined, { renderer: 'canvas' })
+    const ro = new ResizeObserver(() => chart?.resize())
+    ro.observe(chartContainer.value)
+  }
   if (!chart) return
-  if (!data) {
+  if (!data || data.values.every((v: number) => v === 0)) {
     chart.clear()
     chart.setOption(getBaseOption())
     return
@@ -205,21 +211,18 @@ function clearChart() {
     </div>
 
     <!-- 光谱曲线 -->
-    <div v-if="spectral" class="spectral-section">
-      <div class="spectral-header">
+    <div class="spectral-section" :class="{ 'spectral-empty': !spectral }">
+      <div v-if="spectral" class="spectral-header">
         <span class="spectral-title">光谱曲线</span>
         <button class="btn-close" title="关闭" @click="clearChart">✕</button>
       </div>
-      <div class="spectral-info">
+      <div v-if="spectral" class="spectral-info">
         <div class="si-row"><span class="si-label">位置</span><span class="si-val">{{ spectral.lat.toFixed(5) }}, {{ spectral.lon.toFixed(5) }}</span></div>
         <div class="si-row"><span class="si-label">像素</span><span class="si-val">({{ spectral.pixelX }}, {{ spectral.pixelY }})</span></div>
         <div class="si-row"><span class="si-label">波段 {{ store.tiff.band }}</span><span class="si-val mono">{{ spectral.currentValue.toFixed(6) }}</span></div>
       </div>
-      <div v-if="spectral.values.every(v => v === 0)" class="spectral-nodata">该位置无有效高光谱像素</div>
-      <div v-else ref="chartContainer" class="chart-box" />
-    </div>
-    <div v-else class="spectral-section spectral-empty">
-      <div ref="chartContainer" class="chart-box" />
+      <div v-if="spectral && spectral.values.every(v => v === 0)" class="spectral-nodata">该位置无有效高光谱像素</div>
+      <div ref="chartContainer" class="chart-box" style="height:180px" />
     </div>
   </div>
 </template>
