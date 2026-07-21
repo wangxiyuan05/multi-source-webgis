@@ -2,12 +2,14 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import * as Cesium from 'cesium'
 import TIFFImageryProvider from 'tiff-imagery-provider'
+import { fromUrl } from 'geotiff'
 import { getMapStore, type LayerItem } from '../stores/mapStore'
 
 const mapContainer = ref<HTMLDivElement>()
 let viewer: Cesium.Viewer | null = null
 let tiffProvider: TIFFImageryProvider | null = null
 let tiffLayer: Cesium.ImageryLayer | null = null
+let geotiffReader: any = null  // 缓存 geotiff 读取器
 let obliqueTileset: Cesium.Cesium3DTileset | null = null
 let gsTileset: Cesium.Cesium3DTileset | null = null
 const store = getMapStore()
@@ -96,6 +98,8 @@ onMounted(async () => {
     })
     store.tiff.domainMin = 0; store.tiff.domainMax = 0.05
     tiffLayer = viewer.imageryLayers.addImageryProvider(tiffProvider as unknown as Cesium.ImageryProvider)
+    // 初始化 geotiff 读取器（供光谱查询用）
+    fromUrl('/cog/final-cog.tif').then(r => { geotiffReader = r; console.log('[光谱] 读取器就绪') }).catch(e => console.error('[光谱] 读取器初始化失败', e))
     registerLayer({
       name: '高光谱影像', key: 'tiff', visible: true, loading: false, loaded: true,
       flyTo: () => { if (tiffProvider?.ready) viewer?.camera.flyToBoundingSphere(tiffProvider.rectangle as any) },
@@ -179,32 +183,31 @@ onMounted(async () => {
     // 没有拾取到实体 → 清空控制点弹窗
     store.controlPointInfo = null
 
-    // 尝试光谱查询
+    // 光谱查询 — 用 geotiff 直接读取像素
     const cartesian = viewer!.camera.pickEllipsoid(click.position, viewer!.scene.globe.ellipsoid)
     if (!cartesian) { store.spectralData = null; return }
     const carto = Cesium.Cartographic.fromCartesian(cartesian)
     const lon = Cesium.Math.toDegrees(carto.longitude)
     const lat = Cesium.Math.toDegrees(carto.latitude)
 
-    if (!tiffProvider?.ready) return
+    if (!geotiffReader) { console.warn('[光谱] 读取器未就绪'); return }
     try {
-      const rect = tiffProvider.rectangle
-      const imgW = 5509, imgH = 1306
-      const pixelX = Math.round(((lon - rect.west) / (rect.east - rect.west) % 1 + 1) % 1 * imgW)
-      const pixelY = Math.round(((lat - rect.south) / (rect.north - rect.south) % 1 + 1) % 1 * imgH)
+      const image = await geotiffReader.getImage(0)
+      const w = image.getWidth(), h = image.getHeight()
 
-      const level = Math.min(tiffProvider.maximumLevel, 14)
-      const tileXY = tiffProvider.tilingScheme.positionToTileXY(carto, level)
-      const features = await tiffProvider.pickFeatures(Math.floor(tileXY.x), Math.floor(tileXY.y), level, lon, lat)
-      if (features?.length) {
-        const props = (features[0] as any).properties || {}
-        const entries = Object.entries(props).map(([k, v]) => [parseInt(k.replace(/\D/g, '')), v] as const).filter(([n]) => !isNaN(n))
-        entries.sort((a, b) => a[0] - b[0])
-        const bands = entries.map(e => e[0])
-        const values = entries.map(e => e[1] as number)
-        const currentBand = store.tiff.band
-        const idx = bands.indexOf(currentBand)
-        store.spectralData = { lon, lat, pixelX, pixelY, currentValue: idx >= 0 ? values[idx] : values[0], bands, values }
+      // 像素坐标：TIFF 无地理参考，rectangle 为 (0, 0, 5509, 1306) 包裹全球
+      const px = ((lon % w) + w) % w
+      const py = ((lat % h) + h) % h
+
+      // 一次读取全部波段（151 samples × 1 pixel）
+      const allRasters = await image.readRasters({ window: [px, py, px + 1, py + 1] })
+      const bands = allRasters.map((_: any, i: number) => i + 1)
+      const values = allRasters.map((r: Float32Array) => r[0])
+      const cur = store.tiff.band
+      const ci = bands.indexOf(cur)
+      store.spectralData = {
+        lon, lat, pixelX: Math.round(px), pixelY: Math.round(py),
+        currentValue: ci >= 0 ? values[ci] : values[0], bands, values,
       }
     } catch (err) { console.error('光谱点选失败:', err) }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
