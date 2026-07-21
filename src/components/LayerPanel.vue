@@ -170,6 +170,35 @@ function clearChart() {
           step="any"
         />
       </div>
+      <div class="tiff-divider" />
+      <div class="tiff-row">
+        <span class="tiff-label">经度</span>
+        <input
+          type="number"
+          v-model.number="store.tiffOffset.lon"
+          class="tiff-control"
+          step="0.0001"
+        />
+      </div>
+      <div class="tiff-row">
+        <span class="tiff-label">纬度</span>
+        <input
+          type="number"
+          v-model.number="store.tiffOffset.lat"
+          class="tiff-control"
+          step="0.0001"
+        />
+      </div>
+      <div class="tiff-row">
+        <span class="tiff-label">GSD</span>
+        <input
+          type="number"
+          v-model.number="store.tiffOffset.gsd"
+          class="tiff-control"
+          step="0.0000001"
+          title="像元大小（度/像素），默认 ~0.3m"
+        />
+      </div>
     </div>
 
     <!-- 分屏对比 -->
@@ -391,6 +420,12 @@ function clearChart() {
 /* number input 右边箭头区域窄一点 */
 .tiff-control[type='number'] {
   -moz-appearance: textfield;
+}
+
+.tiff-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+  margin: 6px 0;
 }
 
 /* ---- Split-screen ---- */

@@ -31,6 +31,8 @@ export interface MapStore {
   spectralData: SpectralData | null
   splitMode: boolean
   tiff: TiffState
+  /** COG 手动定位偏移（度），仅当 TIFF 无地理参考时生效 */
+  tiffOffset: { lon: number; lat: number; gsd: number }
 }
 
 export const COLORSCALE_OPTIONS = [
@@ -64,6 +66,7 @@ const store = reactive<MapStore>({
     domainMin: 0,
     domainMax: 1,
   },
+  tiffOffset: { lon: 120.08, lat: 30.31, gsd: 0.0000027 },
 })
 
 export function useMapStore() {

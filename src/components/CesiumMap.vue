@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import * as Cesium from 'cesium'
-import TIFFImageryProvider from 'tiff-imagery-provider'
-import { getMapStore, COLORSCALE_OPTIONS, type LayerItem } from '../stores/mapStore'
+import { getMapStore, type LayerItem } from '../stores/mapStore'
+import { initCogReader, readBand, renderToCanvas, readPixelAllBands } from '../utils/cogRenderer'
 
 const mapContainer = ref<HTMLDivElement>()
 let viewer: Cesium.Viewer | null = null
-let tiffProvider: TIFFImageryProvider | null = null
 let tiffLayer: Cesium.ImageryLayer | null = null
 let obliqueTileset: Cesium.Cesium3DTileset | null = null
 let gsTileset: Cesium.Cesium3DTileset | null = null
@@ -26,20 +25,32 @@ async function loadTileset(url: string): Promise<Cesium.Cesium3DTileset | null> 
   }
 }
 
-/** 注册图层到 store */
 function registerLayer(item: LayerItem) {
   store.layers.push(item)
 }
 
+/** 获取 COG 当前的地理矩形 */
+function getTiffRect() {
+  const { lon, lat, gsd } = store.tiffOffset
+  const cosLat = Math.cos(lat * Math.PI / 180)
+  const w = 5509 * gsd / cosLat
+  const h = 1306 * gsd
+  return {
+    west: lon - w / 2,
+    east: lon + w / 2,
+    south: lat - h / 2,
+    north: lat + h / 2,
+  }
+}
+
 /** 从 GeoJSON 加载控制点 */
-async function loadGeoJsonPoints(url: string, color: Cesium.Color, label: string): Promise<Cesium.GeoJsonDataSource | null> {
+async function loadGeoJsonPoints(url: string, color: Cesium.Color, _label: string): Promise<Cesium.GeoJsonDataSource | null> {
   if (!viewer) return null
   try {
     const dataSource = await Cesium.GeoJsonDataSource.load(url, {
       clampToGround: true,
       markerSize: 0,
     })
-    // 自定义点样式
     dataSource.entities.values.forEach((entity) => {
       entity.billboard = undefined
       entity.point = new Cesium.PointGraphics({
@@ -79,29 +90,21 @@ async function loadModelGcp(tileset: Cesium.Cesium3DTileset): Promise<Cesium.Geo
     const resp = await fetch('/geojson/model-gcp.json')
     const json = await resp.json()
     const matrix = tileset.root.transform
-    const positions: Cesium.Cartesian3[] = []
-
     const features: Record<string, any>[] = []
     for (const pt of json.points) {
-      const local = Cesium.Cartesian3.fromElements(pt.local[0], pt.local[1], pt.local[2], new Cesium.Cartesian3())
+      const local = new Cesium.Cartesian3(pt.local[0], pt.local[1], pt.local[2])
       const ecef = Cesium.Matrix4.multiplyByPoint(matrix, local, new Cesium.Cartesian3())
       const carto = Cesium.Cartographic.fromCartesian(ecef)
       const lon = Cesium.Math.toDegrees(carto.longitude)
       const lat = Cesium.Math.toDegrees(carto.latitude)
-      positions.push(ecef)
       features.push({
         type: 'Feature',
         properties: { id: pt.id },
         geometry: { type: 'Point', coordinates: [lon, lat, carto.height] },
       })
     }
-
-    // 用 GeoJsonDataSource 统一样式
     const fc = { type: 'FeatureCollection', features }
-    const dataSource = await Cesium.GeoJsonDataSource.load(fc, {
-      clampToGround: true,
-      markerSize: 0,
-    })
+    const dataSource = await Cesium.GeoJsonDataSource.load(fc, { clampToGround: true, markerSize: 0 })
     dataSource.entities.values.forEach((entity) => {
       entity.billboard = undefined
       entity.point = new Cesium.PointGraphics({
@@ -134,6 +137,34 @@ async function loadModelGcp(tileset: Cesium.Cesium3DTileset): Promise<Cesium.Geo
   }
 }
 
+// ---------- 高光谱渲染 ----------
+
+async function applyTiffRender() {
+  if (!viewer) return
+  const s = store.tiff
+  const rect = getTiffRect()
+
+  // 读取当前波段数据
+  const result = await readBand(s.band)
+  if (!result) return
+
+  // 渲染到 Canvas
+  const canvas = renderToCanvas(result.data, result.width, result.height, s.domainMin, s.domainMax, s.colorScale)
+
+  // 创建 SingleTileImageryProvider（严格 WGS84 坐标）
+  const provider = new Cesium.SingleTileImageryProvider({
+    url: canvas.toDataURL('image/png'),
+    rectangle: Cesium.Rectangle.fromDegrees(rect.west, rect.south, rect.east, rect.north),
+  })
+
+  // 替换旧图层
+  const idx = tiffLayer ? viewer.imageryLayers.indexOf(tiffLayer) : -1
+  if (tiffLayer) {
+    viewer.imageryLayers.remove(tiffLayer)
+  }
+  tiffLayer = viewer.imageryLayers.addImageryProvider(provider, idx >= 0 ? idx : undefined)
+}
+
 // ---------- 生命周期 ----------
 
 onMounted(async () => {
@@ -159,7 +190,7 @@ onMounted(async () => {
   // 2. 清空默认图层
   viewer.imageryLayers.removeAll()
 
-  // 3. 高德卫星底图
+  // 3. 高德卫星底图（Web Mercator）
   const gaodeProvider = new Cesium.UrlTemplateImageryProvider({
     url: 'https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
     subdomains: ['1', '2', '3', '4'],
@@ -169,21 +200,18 @@ onMounted(async () => {
   })
   viewer.imageryLayers.addImageryProvider(gaodeProvider)
 
-  // 4. COGTiff 高光谱影像
+  // 4. COGTiff 高光谱影像（用 geotiff 读数据 + SingleTileImageryProvider 定位）
   try {
-    tiffProvider = await TIFFImageryProvider.fromUrl('/cog/final-cog.tif', {
-      enablePickFeatures: true,
-      renderOptions: {
-        single: { band: 1, colorScale: 'viridis', domain: [0, 1] },
-      },
-    })
-    // 读取实际波段统计值作为 domain 默认值
-    const b1 = tiffProvider.bands?.[1]
-    if (b1 && b1.min !== undefined && b1.max !== undefined) {
-      store.tiff.domainMin = b1.min
-      store.tiff.domainMax = b1.max
+    await initCogReader('/cog/final-cog.tif')
+
+    // 初次加载自动计算 domain（不传固定值域）
+    const initialData = await readBand(1)
+    if (initialData) {
+      store.tiff.domainMin = initialData.min
+      store.tiff.domainMax = initialData.max
     }
-    applyTiffRender()
+
+    await applyTiffRender()
     registerLayer({
       name: '高光谱影像',
       key: 'tiff',
@@ -191,7 +219,13 @@ onMounted(async () => {
       loading: false,
       loaded: true,
       flyTo: () => {
-        if (tiffProvider?.ready) viewer?.camera.flyToBoundingSphere(tiffProvider.rectangle as any)
+        const r = getTiffRect()
+        const dest = Cesium.Cartesian3.fromDegrees(
+          (r.west + r.east) / 2,
+          (r.north + r.south) / 2,
+          2000,
+        )
+        viewer?.camera.flyTo({ destination: dest })
       },
       setVisible: (v) => { if (tiffLayer) tiffLayer.show = v },
     })
@@ -226,7 +260,7 @@ onMounted(async () => {
     setVisible: (v) => { if (gsTileset) gsTileset.show = v },
   })
 
-  // 7. 地表控制点（蓝色）
+  // 7. 地表控制点（蓝色，WGS84 贴地）
   const surfaceDs = await loadGeoJsonPoints(
     '/geojson/surface-gcp.geojson',
     Cesium.Color.ROYALBLUE,
@@ -242,7 +276,7 @@ onMounted(async () => {
     setVisible: (v) => { if (surfaceDs) surfaceDs.show = v },
   })
 
-  // 8. 模型控制点（红色）- 需要 3DGS 的 transform 做坐标转换
+  // 8. 模型控制点（红色，经 3DGS 矩阵 → ECEF → WGS84 转换后贴地）
   let modelDs: Cesium.GeoJsonDataSource | null = null
   if (gsTileset) {
     modelDs = await loadModelGcp(gsTileset)
@@ -257,7 +291,7 @@ onMounted(async () => {
     setVisible: (v) => { if (modelDs) modelDs.show = v },
   })
 
-  // 9. 点击地图 → 光谱曲线
+  // 9. 点击地图 → 光谱曲线（使用 cogRenderer 直接读取）
   viewer.screenSpaceEventHandler.setInputAction(async (click: any) => {
     const cartesian = viewer!.camera.pickEllipsoid(
       click.position,
@@ -271,31 +305,16 @@ onMounted(async () => {
     const lon = Cesium.Math.toDegrees(carto.longitude)
     const lat = Cesium.Math.toDegrees(carto.latitude)
 
-    if (!tiffProvider) return
+    const rect = getTiffRect()
+    if (lon < rect.west || lon > rect.east || lat < rect.south || lat > rect.north) return
+
     try {
-      const level = Math.min(tiffProvider.maximumLevel, 14)
-      const tileXY = tiffProvider.tilingScheme.positionToTileXY(carto, level)
-      const tx = Math.floor(Math.max(0, tileXY.x))
-      const ty = Math.floor(Math.max(0, tileXY.y))
-      const features = await tiffProvider.pickFeatures(tx, ty, level, lon, lat)
-      if (features?.length) {
-        const props = (features[0] as any).properties
-        const bands: number[] = []
-        const values: number[] = []
-        for (const [key, val] of Object.entries(props)) {
-          const num = parseInt(key.replace(/\D/g, ''))
-          if (!isNaN(num) && typeof val === 'number') {
-            bands.push(num)
-            values.push(val)
-          }
-        }
-        // 按波段号排序
-        const sorted = bands.map((b, i) => ({ b, v: values[i] })).sort((a, b) => a.b - b.b)
+      const result = await readPixelAllBands(lon, lat, rect)
+      if (result) {
         store.spectralData = {
-          lon,
-          lat,
-          bands: sorted.map(s => s.b),
-          values: sorted.map(s => s.v),
+          lon, lat,
+          bands: result.bands,
+          values: result.values,
         }
       }
     } catch (err) {
@@ -303,10 +322,10 @@ onMounted(async () => {
     }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
 
-  // 10. 挂到 window 方便调试
+  // 10. 挂到 window
   ;(window as any).viewer = viewer
 
-  // 10. 隐藏水印
+  // 11. 隐藏水印
   ;(viewer.cesiumWidget.creditContainer as HTMLElement).style.display = 'none'
 })
 
@@ -327,29 +346,15 @@ watch(() => store.splitMode, (enabled) => {
   }
 })
 
-// ---------- 高光谱渲染参数 ----------
-
-function applyTiffRender() {
-  if (!viewer || !tiffProvider) return
-  const s = store.tiff
-  tiffProvider.renderOptions.single = {
-    band: s.band,
-    colorScale: s.colorScale as any,
-    domain: [s.domainMin, s.domainMax],
-  }
-  // 移除旧层并重建，清空缓存使新参数生效
-  const idx = tiffLayer ? viewer.imageryLayers.indexOf(tiffLayer) : -1
-  if (tiffLayer) {
-    viewer.imageryLayers.remove(tiffLayer)
-  }
-  tiffLayer = viewer.imageryLayers.addImageryProvider(
-    tiffProvider as unknown as Cesium.ImageryProvider,
-    idx >= 0 ? idx : undefined,
-  )
-}
-
+// 高光谱参数变化 → 重新渲染
 watch(
   () => [store.tiff.band, store.tiff.colorScale, store.tiff.domainMin, store.tiff.domainMax],
+  () => { applyTiffRender() },
+)
+
+// 偏移变化 → 重新渲染
+watch(
+  () => [store.tiffOffset.lon, store.tiffOffset.lat, store.tiffOffset.gsd],
   () => { applyTiffRender() },
 )
 
