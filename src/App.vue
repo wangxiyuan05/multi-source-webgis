@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import CesiumMap from './components/CesiumMap.vue'
+import LayerPanel from './components/LayerPanel.vue'
 </script>
 
 <template>
   <CesiumMap />
+  <LayerPanel />
 </template>
 
 <style>
