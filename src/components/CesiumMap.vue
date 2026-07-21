@@ -30,31 +30,9 @@ function registerLayer(item: LayerItem) {
   store.layers.push(item)
 }
 
-/** 获取 COG 当前的地理矩形 */
-function getTiffRect() {
-  const { lon, lat, gsd } = store.tiffOffset
-  const cosLat = Math.cos(lat * Math.PI / 180)
-  const w = 5509 * gsd / cosLat
-  const h = 1306 * gsd
-  return {
-    west: lon - w / 2,
-    east: lon + w / 2,
-    south: lat - h / 2,
-    north: lat + h / 2,
-  }
-}
-
-/** 重新定位并刷新 COG 图层 */
-function repositionTiff() {
+/** 刷新 COG 图层（重建清空缓存） */
+function refreshTiffLayer() {
   if (!viewer || !tiffProvider) return
-  const r = getTiffRect()
-
-  // 重设 provider 内部定位参数
-  tiffProvider.origin = [r.west, r.north]
-  tiffProvider.bbox = [r.west, r.south, r.east, r.north]
-  tiffProvider.rectangle = Cesium.Rectangle.fromDegrees(r.west, r.south, r.east, r.north)
-
-  // 重建图层以清空缓存
   const idx = tiffLayer ? viewer.imageryLayers.indexOf(tiffLayer) : -1
   if (tiffLayer) viewer.imageryLayers.remove(tiffLayer)
   tiffLayer = viewer.imageryLayers.addImageryProvider(
@@ -168,7 +146,7 @@ onMounted(async () => {
     // 更新 renderOptions
     applyTiffRender()
     // 定位到模型区域
-    repositionTiff()
+    refreshTiffLayer()
     registerLayer({
       name: '高光谱影像',
       key: 'tiff',
@@ -325,14 +303,14 @@ watch(
   () => [store.tiff.band, store.tiff.colorScale, store.tiff.domainMin, store.tiff.domainMax],
   () => {
     applyTiffRender()
-    repositionTiff()  // 重建图层使新参数生效
+    refreshTiffLayer()  // 重建图层使新参数生效
   },
 )
 
 // 偏移变化 → 重定位
 watch(
   () => [store.tiffOffset.lon, store.tiffOffset.lat, store.tiffOffset.gsd],
-  () => { repositionTiff() },
+  () => { refreshTiffLayer() },
 )
 
 // ---------- 分屏对比 ----------
