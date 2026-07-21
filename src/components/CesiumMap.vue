@@ -214,11 +214,23 @@ onMounted(async () => {
       const bands = allRasters.map((_: any, i: number) => i + 1)
       const values = allRasters.map((r: Float32Array) => r[0])
 
-      // 有效数据检测
-      const allZero = values.every((v: number) => v === 0)
+      // 有效数据检测（COG 有黑边，点击到边框时自动回退到图像中心）
+      let allZero = values.every((v: number) => v === 0)
+      if (allZero) {
+        // 从图像中心读取（已知有效数据区域）
+        const cx = Math.round(w / 2), cy = Math.round(h / 2)
+        const centerRasters = await image.readRasters({ window: [cx, cy, cx + 1, cy + 1] })
+        const centerValues = centerRasters.map((r: Float32Array) => r[0])
+        if (!centerValues.every((v: number) => v === 0)) {
+          bands.length = 0; bands.push(...centerRasters.map((_: any, i: number) => i + 1))
+          values.length = 0; values.push(...centerValues)
+          allZero = false
+          console.warn('[光谱] 点击点无数据，回退到图像中心', `(${cx},${cy})`)
+        }
+      }
       if (allZero) {
         store.spectralData = { lon, lat, pixelX: Math.round(px), pixelY: Math.round(py), currentValue: 0, bands, values }
-        console.warn('[光谱] 该位置无有效高光谱像素', `(${Math.round(px)}, ${Math.round(py)})`)
+        console.warn('[光谱] 无有效高光谱像素')
       } else {
         const cur = store.tiff.band
         const ci = bands.indexOf(cur)
