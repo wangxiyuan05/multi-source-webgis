@@ -188,6 +188,11 @@ onMounted(async () => {
 
     if (!tiffProvider?.ready) return
     try {
+      const rect = tiffProvider.rectangle
+      const imgW = 5509, imgH = 1306
+      const pixelX = Math.round(((lon - rect.west) / (rect.east - rect.west) % 1 + 1) % 1 * imgW)
+      const pixelY = Math.round(((lat - rect.south) / (rect.north - rect.south) % 1 + 1) % 1 * imgH)
+
       const level = Math.min(tiffProvider.maximumLevel, 14)
       const tileXY = tiffProvider.tilingScheme.positionToTileXY(carto, level)
       const features = await tiffProvider.pickFeatures(Math.floor(tileXY.x), Math.floor(tileXY.y), level, lon, lat)
@@ -195,7 +200,11 @@ onMounted(async () => {
         const props = (features[0] as any).properties || {}
         const entries = Object.entries(props).map(([k, v]) => [parseInt(k.replace(/\D/g, '')), v] as const).filter(([n]) => !isNaN(n))
         entries.sort((a, b) => a[0] - b[0])
-        store.spectralData = { lon, lat, bands: entries.map(e => e[0]), values: entries.map(e => e[1] as number) }
+        const bands = entries.map(e => e[0])
+        const values = entries.map(e => e[1] as number)
+        const currentBand = store.tiff.band
+        const idx = bands.indexOf(currentBand)
+        store.spectralData = { lon, lat, pixelX, pixelY, currentValue: idx >= 0 ? values[idx] : values[0], bands, values }
       }
     } catch (err) { console.error('光谱点选失败:', err) }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK)

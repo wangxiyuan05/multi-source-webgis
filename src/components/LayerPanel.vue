@@ -207,11 +207,13 @@ function clearChart() {
     <!-- 光谱曲线 -->
     <div v-if="spectral" class="spectral-section">
       <div class="spectral-header">
-        <span class="spectral-title">
-          光谱曲线
-          <span class="spectral-pos">{{ spectral.lat.toFixed(4) }}, {{ spectral.lon.toFixed(4) }}</span>
-        </span>
+        <span class="spectral-title">光谱曲线</span>
         <button class="btn-close" title="关闭" @click="clearChart">✕</button>
+      </div>
+      <div class="spectral-info">
+        <div class="si-row"><span class="si-label">位置</span><span class="si-val">{{ spectral.lat.toFixed(5) }}, {{ spectral.lon.toFixed(5) }}</span></div>
+        <div class="si-row"><span class="si-label">像素</span><span class="si-val">({{ spectral.pixelX }}, {{ spectral.pixelY }})</span></div>
+        <div class="si-row"><span class="si-label">波段 {{ store.tiff.band }}</span><span class="si-val mono">{{ spectral.currentValue.toFixed(6) }}</span></div>
       </div>
       <div ref="chartContainer" class="chart-box" />
     </div>
@@ -493,9 +495,39 @@ function clearChart() {
   color: #333;
 }
 
+.spectral-info {
+  padding: 2px 14px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.si-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.si-label {
+  font-size: 11px;
+  color: #999;
+  width: 44px;
+  flex-shrink: 0;
+}
+
+.si-val {
+  font-size: 12px;
+  color: #333;
+  font-weight: 500;
+}
+
+.si-val.mono {
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
 .chart-box {
   width: 100%;
-  height: 200px;
+  height: 180px;
   padding: 0 4px;
 }
 </style>

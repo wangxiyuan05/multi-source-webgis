@@ -14,6 +14,9 @@ export interface LayerItem {
 export interface SpectralData {
   lon: number
   lat: number
+  pixelX: number
+  pixelY: number
+  currentValue: number
   bands: number[]
   values: number[]
 }
