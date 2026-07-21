@@ -247,21 +247,22 @@ onMounted(async () => {
   ;(viewer.cesiumWidget.creditContainer as HTMLElement).style.display = 'none'
 })
 
-// 高光谱应用渲染配置 — 重建 TIFFImageryProvider（不修改原始文件）
+// 高光谱应用渲染配置 — 重建 TIFFImageryProvider
 watch(() => store.tiffApplyVersion, async () => {
   if (!viewer) return
   const s = store.tiff
-  // 移除旧图层和 provider
   if (tiffLayer) { viewer.imageryLayers.remove(tiffLayer); tiffLayer = null }
   if (tiffProvider) { tiffProvider.destroy(); tiffProvider = null }
-  // 用面板参数重建
   try {
+    const renderOptions = s.renderMode === 'singleBand'
+      ? { single: { band: s.band, colorScale: s.colorScale as any, domain: [s.domainMin, s.domainMax] as [number, number] }, resampleMethod: 'nearest' as const }
+      : { multi: { r: { band: s.rgb.rBand, min: s.rgb.rMin, max: s.rgb.rMax }, g: { band: s.rgb.gBand, min: s.rgb.gMin, max: s.rgb.gMax }, b: { band: s.rgb.bBand, min: s.rgb.bMin, max: s.rgb.bMax } }, resampleMethod: 'nearest' as const }
     tiffProvider = await TIFFImageryProvider.fromUrl('/cog/final-cog.tif', {
       enablePickFeatures: true,
-      renderOptions: { single: { band: s.band, colorScale: s.colorScale as any, domain: [s.domainMin, s.domainMax] } },
+      renderOptions,
     })
     tiffLayer = viewer.imageryLayers.addImageryProvider(tiffProvider as unknown as Cesium.ImageryProvider)
-    console.log('[TIFF] 重建成功', s)
+    console.log('[TIFF] 重建成功', s.renderMode, s.renderMode === 'rgb' ? s.rgb : s.band)
   } catch (err) { console.error('[TIFF] 重建失败:', err) }
 })
 

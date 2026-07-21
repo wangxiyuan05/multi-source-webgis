@@ -21,11 +21,21 @@ export interface SpectralData {
   values: number[]
 }
 
+export type RenderMode = 'singleBand' | 'rgb'
+
+export interface RgbConfig {
+  rBand: number; rMin: number; rMax: number
+  gBand: number; gMin: number; gMax: number
+  bBand: number; bMin: number; bMax: number
+}
+
 export interface TiffState {
+  renderMode: RenderMode
   band: number
   colorScale: string
   domainMin: number
   domainMax: number
+  rgb: RgbConfig
 }
 
 export interface ControlPointInfo {
@@ -42,9 +52,7 @@ export interface MapStore {
   spectralData: SpectralData | null
   controlPointInfo: ControlPointInfo | null
   tiff: TiffState
-  /** COG 手动定位偏移（度），仅当 TIFF 无地理参考时生效 */
   tiffOffset: { lon: number; lat: number; gsd: number }
-  /** 递增时触发重新创建 TIFFImageryProvider */
   tiffApplyVersion: number
 }
 
@@ -74,10 +82,12 @@ const store = reactive<MapStore>({
   spectralData: null,
   controlPointInfo: null,
   tiff: {
+    renderMode: 'singleBand',
     band: 1,
     colorScale: 'viridis',
     domainMin: 0,
-    domainMax: 1,
+    domainMax: 0.3,
+    rgb: { rBand: 1, rMin: 0, rMax: 0.3, gBand: 2, gMin: 0, gMax: 0.3, bBand: 3, bMin: 0, bMax: 0.3 },
   },
   tiffOffset: { lon: 120.08, lat: 30.31, gsd: 0.0000027 },
   tiffApplyVersion: 0,

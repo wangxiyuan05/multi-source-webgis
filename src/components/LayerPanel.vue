@@ -146,64 +146,69 @@ function clearChart() {
     <!-- 高光谱渲染 -->
     <div class="tiff-section">
       <div class="tiff-header">高光谱渲染</div>
-      <div class="tiff-row">
-        <span class="tiff-label">波段</span>
-        <select v-model.number="store.tiff.band" class="tiff-control">
-          <option v-for="b in 151" :key="b" :value="b">{{ b }}</option>
-        </select>
+
+      <!-- 模式切换 -->
+      <div class="tiff-mode-row">
+        <label class="tiff-mode-label" :class="{ active: store.tiff.renderMode === 'singleBand' }">
+          <input type="radio" value="singleBand" v-model="store.tiff.renderMode" /> 单波段
+        </label>
+        <label class="tiff-mode-label" :class="{ active: store.tiff.renderMode === 'rgb' }">
+          <input type="radio" value="rgb" v-model="store.tiff.renderMode" /> RGB
+        </label>
       </div>
-      <div class="tiff-row">
-        <span class="tiff-label">色带</span>
-        <select v-model="store.tiff.colorScale" class="tiff-control">
-          <option v-for="s in COLORSCALE_OPTIONS" :key="s" :value="s">{{ s }}</option>
-        </select>
-      </div>
-      <div class="tiff-row">
-        <span class="tiff-label">最小值</span>
-        <input
-          type="number"
-          v-model.number="store.tiff.domainMin"
-          class="tiff-control"
-          step="any"
-        />
-      </div>
-      <div class="tiff-row">
-        <span class="tiff-label">最大值</span>
-        <input
-          type="number"
-          v-model.number="store.tiff.domainMax"
-          class="tiff-control"
-          step="any"
-        />
-      </div>
+
+      <!-- 单波段模式 -->
+      <template v-if="store.tiff.renderMode === 'singleBand'">
+        <div class="tiff-row">
+          <span class="tiff-label">波段</span>
+          <select v-model.number="store.tiff.band" class="tiff-control">
+            <option v-for="b in 151" :key="b" :value="b">{{ b }}</option>
+          </select>
+        </div>
+        <div class="tiff-row">
+          <span class="tiff-label">色带</span>
+          <select v-model="store.tiff.colorScale" class="tiff-control">
+            <option v-for="s in COLORSCALE_OPTIONS" :key="s" :value="s">{{ s }}</option>
+          </select>
+        </div>
+        <div class="tiff-row">
+          <span class="tiff-label">最小值</span>
+          <input type="number" v-model.number="store.tiff.domainMin" class="tiff-control" step="any" />
+        </div>
+        <div class="tiff-row">
+          <span class="tiff-label">最大值</span>
+          <input type="number" v-model.number="store.tiff.domainMax" class="tiff-control" step="any" />
+        </div>
+      </template>
+
+      <!-- RGB 模式 -->
+      <template v-if="store.tiff.renderMode === 'rgb'">
+        <div class="tiff-rgb-header">R 通道</div>
+        <div class="tiff-row"><span class="tiff-label">波段</span><select v-model.number="store.tiff.rgb.rBand" class="tiff-control"><option v-for="b in 151" :key="'r'+b" :value="b">{{ b }}</option></select></div>
+        <div class="tiff-row"><span class="tiff-label">最小值</span><input type="number" v-model.number="store.tiff.rgb.rMin" class="tiff-control" step="any" /></div>
+        <div class="tiff-row"><span class="tiff-label">最大值</span><input type="number" v-model.number="store.tiff.rgb.rMax" class="tiff-control" step="any" /></div>
+        <div class="tiff-rgb-header">G 通道</div>
+        <div class="tiff-row"><span class="tiff-label">波段</span><select v-model.number="store.tiff.rgb.gBand" class="tiff-control"><option v-for="b in 151" :key="'g'+b" :value="b">{{ b }}</option></select></div>
+        <div class="tiff-row"><span class="tiff-label">最小值</span><input type="number" v-model.number="store.tiff.rgb.gMin" class="tiff-control" step="any" /></div>
+        <div class="tiff-row"><span class="tiff-label">最大值</span><input type="number" v-model.number="store.tiff.rgb.gMax" class="tiff-control" step="any" /></div>
+        <div class="tiff-rgb-header">B 通道</div>
+        <div class="tiff-row"><span class="tiff-label">波段</span><select v-model.number="store.tiff.rgb.bBand" class="tiff-control"><option v-for="b in 151" :key="'b'+b" :value="b">{{ b }}</option></select></div>
+        <div class="tiff-row"><span class="tiff-label">最小值</span><input type="number" v-model.number="store.tiff.rgb.bMin" class="tiff-control" step="any" /></div>
+        <div class="tiff-row"><span class="tiff-label">最大值</span><input type="number" v-model.number="store.tiff.rgb.bMax" class="tiff-control" step="any" /></div>
+      </template>
+
       <div class="tiff-divider" />
       <div class="tiff-row">
         <span class="tiff-label">经度</span>
-        <input
-          type="number"
-          v-model.number="store.tiffOffset.lon"
-          class="tiff-control"
-          step="0.0001"
-        />
+        <input type="number" v-model.number="store.tiffOffset.lon" class="tiff-control" step="0.0001" />
       </div>
       <div class="tiff-row">
         <span class="tiff-label">纬度</span>
-        <input
-          type="number"
-          v-model.number="store.tiffOffset.lat"
-          class="tiff-control"
-          step="0.0001"
-        />
+        <input type="number" v-model.number="store.tiffOffset.lat" class="tiff-control" step="0.0001" />
       </div>
       <div class="tiff-row">
         <span class="tiff-label">GSD</span>
-        <input
-          type="number"
-          v-model.number="store.tiffOffset.gsd"
-          class="tiff-control"
-          step="0.0000001"
-          title="像元大小（度/像素），默认 ~0.3m"
-        />
+        <input type="number" v-model.number="store.tiffOffset.gsd" class="tiff-control" step="0.0000001" title="像元大小（度/像素），默认 ~0.3m" />
       </div>
       <button class="tiff-apply-btn" @click="store.tiffApplyVersion++">
         应用渲染配置
@@ -417,6 +422,26 @@ function clearChart() {
 /* number input 右边箭头区域窄一点 */
 .tiff-control[type='number'] {
   -moz-appearance: textfield;
+}
+
+.tiff-mode-row {
+  display: flex; gap: 0; margin-bottom: 6px; padding: 0 14px;
+}
+
+.tiff-mode-label {
+  flex: 1; text-align: center; font-size: 12px; padding: 4px 0;
+  border: 1px solid #d9d9d9; background: #fff; color: #666; cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tiff-mode-label:first-child { border-radius: 4px 0 0 4px; }
+.tiff-mode-label:last-child { border-radius: 0 4px 4px 0; }
+.tiff-mode-label.active { background: #1890ff; color: #fff; border-color: #1890ff; }
+.tiff-mode-label input { display: none; }
+
+.tiff-rgb-header {
+  font-size: 11px; font-weight: 600; color: #555;
+  padding: 4px 14px 2px; margin-top: 2px;
 }
 
 .tiff-divider {
