@@ -76,9 +76,8 @@ function gcj02ToWgs84(lng: number, lat: number): { lng: number; lat: number } {
   return { lng: lng * 2 - (lng + mDlng), lat: lat * 2 - (lat + mDlat) }
 }
 
-/** 对 tileset 施加 GCJ-02 → WGS-84 位置修正 */
+/** 对 tileset 施加 GCJ-02 → WGS-84 水平修正（不改变高程） */
 function fixGcjTileset(tileset: Cesium.Cesium3DTileset) {
-  // 读取 tileset 当前的 ECEF 位置（即 transform 的平移部分）
   const t = tileset.root.transform
   const ecefPos = new Cesium.Cartesian3(t[12], t[13], t[14])
   const carto = Cesium.Cartographic.fromCartesian(ecefPos)
@@ -86,12 +85,23 @@ function fixGcjTileset(tileset: Cesium.Cesium3DTileset) {
   const gcjLat = Cesium.Math.toDegrees(carto.latitude)
 
   const wgs84 = gcj02ToWgs84(gcjLng, gcjLat)
+
+  // 计算 GCJ 和 WGS-84 在 ENU（东-北-天）坐标系下的水平偏移
+  const gcjWgs = Cesium.Cartesian3.fromDegrees(gcjLng, gcjLat, carto.height)
+  const enuMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(gcjWgs)
+  const invEnu = Cesium.Matrix4.inverseTransformation(enuMatrix, new Cesium.Matrix4())
+
   const wgsPos = Cesium.Cartesian3.fromDegrees(wgs84.lng, wgs84.lat, carto.height)
-  const offset = Cesium.Cartesian3.subtract(wgsPos, ecefPos, new Cesium.Cartesian3())
+  const localOffset = Cesium.Matrix4.multiplyByPoint(invEnu, wgsPos, new Cesium.Cartesian3())
 
-  console.log(`[GCJ] 倾斜模型修正: (${gcjLng.toFixed(6)}, ${gcjLat.toFixed(6)}) → (${wgs84.lng.toFixed(6)}, ${wgs84.lat.toFixed(6)}), 偏移 ${offset.x.toFixed(1)}, ${offset.y.toFixed(1)}, ${offset.z.toFixed(1)}m`)
+  // 只保留水平分量（east, north），零掉 up
+  const horizontalLocal = new Cesium.Cartesian3(localOffset.x, localOffset.y, 0)
+  const horizontalEcef = Cesium.Matrix4.multiplyByPoint(enuMatrix, horizontalLocal, new Cesium.Cartesian3())
 
-  tileset.modelMatrix = Cesium.Matrix4.fromTranslation(offset)
+  console.log(`[GCJ] 倾斜模型: (${gcjLng.toFixed(6)}, ${gcjLat.toFixed(6)}) → (${wgs84.lng.toFixed(6)}, ${wgs84.lat.toFixed(6)})`)
+  console.log(`[GCJ] 水平偏移: 东 ${horizontalLocal.x.toFixed(1)}m, 北 ${horizontalLocal.y.toFixed(1)}m`)
+
+  tileset.modelMatrix = Cesium.Matrix4.fromTranslation(horizontalEcef)
 }
 
 // ---------- 加载模型控制点 ----------
