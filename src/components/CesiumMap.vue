@@ -96,12 +96,17 @@ function fixGcjTileset(tileset: Cesium.Cesium3DTileset) {
 
   // 只保留水平分量（east, north），零掉 up
   const horizontalLocal = new Cesium.Cartesian3(localOffset.x, localOffset.y, 0)
-  const horizontalEcef = Cesium.Matrix4.multiplyByPoint(enuMatrix, horizontalLocal, new Cesium.Cartesian3())
+  // ENU 原点（GCJ 位置）的 ECEF 坐标
+  const enuOrigin = Cesium.Matrix4.multiplyByPoint(enuMatrix, Cesium.Cartesian3.ZERO, new Cesium.Cartesian3())
+  // 水平偏移量在 ECEF 中的向量
+  const horizontalAbs = Cesium.Matrix4.multiplyByPoint(enuMatrix, horizontalLocal, new Cesium.Cartesian3())
+  const offsetEcef = Cesium.Cartesian3.subtract(horizontalAbs, enuOrigin, new Cesium.Cartesian3())
 
   console.log(`[GCJ] 倾斜模型: (${gcjLng.toFixed(6)}, ${gcjLat.toFixed(6)}) → (${wgs84.lng.toFixed(6)}, ${wgs84.lat.toFixed(6)})`)
   console.log(`[GCJ] 水平偏移: 东 ${horizontalLocal.x.toFixed(1)}m, 北 ${horizontalLocal.y.toFixed(1)}m`)
+  console.log(`[GCJ] ECEF 偏移向量: ${offsetEcef.x.toFixed(1)}, ${offsetEcef.y.toFixed(1)}, ${offsetEcef.z.toFixed(1)}m`)
 
-  tileset.modelMatrix = Cesium.Matrix4.fromTranslation(horizontalEcef)
+  tileset.modelMatrix = Cesium.Matrix4.fromTranslation(offsetEcef)
 }
 
 // ---------- 加载模型控制点 ----------
