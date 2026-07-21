@@ -41,6 +41,59 @@ function refreshTiffLayer() {
   )
 }
 
+// ---------- GCJ-02 → WGS-84 修正 ----------
+// 国内部分测绘数据会误用 GCJ-02 坐标系，修正后与 Esri WGS-84 底图对齐
+
+function gcj02ToWgs84(lng: number, lat: number): { lng: number; lat: number } {
+  const pi = Math.PI
+  const a = 6378245.0
+  const ee = 0.00669342162296594323
+
+  function transformLat(x: number, y: number) {
+    let ret = -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x))
+    ret += (20 * Math.sin(6 * x * pi) + 20 * Math.sin(2 * x * pi)) * 2 / 3
+    ret += (20 * Math.sin(y * pi) + 40 * Math.sin(y / 3 * pi)) * 2 / 3
+    ret += (160 * Math.sin(y / 12 * pi) + 320 * Math.sin(y * pi / 30)) * 2 / 3
+    return ret
+  }
+
+  function transformLon(x: number, y: number) {
+    let ret = 300 + x + 2 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x))
+    ret += (20 * Math.sin(6 * x * pi) + 20 * Math.sin(2 * x * pi)) * 2 / 3
+    ret += (20 * Math.sin(x * pi) + 40 * Math.sin(x / 3 * pi)) * 2 / 3
+    ret += (150 * Math.sin(x / 12 * pi) + 300 * Math.sin(x / 30 * pi)) * 2 / 3
+    return ret
+  }
+
+  const dlat = transformLat(lng - 105, lat - 35)
+  const dlng = transformLon(lng - 105, lat - 35)
+  const radlat = lat / 180 * pi
+  let magic = Math.sin(radlat)
+  magic = 1 - ee * magic * magic
+  const sqrtMagic = Math.sqrt(magic)
+  const mDlat = (dlat * 180) / ((a * (1 - ee)) / (magic * sqrtMagic) * pi)
+  const mDlng = (dlng * 180) / (a / sqrtMagic * Math.cos(radlat) * pi)
+  return { lng: lng * 2 - (lng + mDlng), lat: lat * 2 - (lat + mDlat) }
+}
+
+/** 对 tileset 施加 GCJ-02 → WGS-84 位置修正 */
+function fixGcjTileset(tileset: Cesium.Cesium3DTileset) {
+  // 读取 tileset 当前的 ECEF 位置（即 transform 的平移部分）
+  const t = tileset.root.transform
+  const ecefPos = new Cesium.Cartesian3(t[12], t[13], t[14])
+  const carto = Cesium.Cartographic.fromCartesian(ecefPos)
+  const gcjLng = Cesium.Math.toDegrees(carto.longitude)
+  const gcjLat = Cesium.Math.toDegrees(carto.latitude)
+
+  const wgs84 = gcj02ToWgs84(gcjLng, gcjLat)
+  const wgsPos = Cesium.Cartesian3.fromDegrees(wgs84.lng, wgs84.lat, carto.height)
+  const offset = Cesium.Cartesian3.subtract(wgsPos, ecefPos, new Cesium.Cartesian3())
+
+  console.log(`[GCJ] 倾斜模型修正: (${gcjLng.toFixed(6)}, ${gcjLat.toFixed(6)}) → (${wgs84.lng.toFixed(6)}, ${wgs84.lat.toFixed(6)}), 偏移 ${offset.x.toFixed(1)}, ${offset.y.toFixed(1)}, ${offset.z.toFixed(1)}m`)
+
+  tileset.modelMatrix = Cesium.Matrix4.fromTranslation(offset)
+}
+
 // ---------- 加载模型控制点 ----------
 
 async function loadModelGcp(tileset: Cesium.Cesium3DTileset): Promise<Cesium.GeoJsonDataSource | null> {
@@ -160,9 +213,10 @@ onMounted(async () => {
     console.error('加载 COGTiff 失败:', err)
   }
 
-  // 5. 倾斜摄影模型
+  // 5. 倾斜摄影模型（疑似 GCJ-02 坐标，需修正到 WGS-84）
   obliqueTileset = await loadTileset('/terra_osgbs-3dtiles/tileset.json')
   if (obliqueTileset) {
+    fixGcjTileset(obliqueTileset)
     viewer.flyTo(obliqueTileset)
   }
   registerLayer({
