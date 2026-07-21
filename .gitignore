@@ -1,0 +1,17 @@
+node_modules
+dist
+*.local
+BIP_to_COGTIFF/
+OSGB_to_3D/
+vue-cesium-app/
+zju_big-3dtiles/
+public/terra_osgbs-3dtiles
+public/zju_big-3dtiles
+public/cog
+dist 
+.vscode 
+.idea 
+*.log 
+/public/3dtiles 
+/public/cog 
+/public/geojson 
