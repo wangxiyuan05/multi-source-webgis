@@ -88,7 +88,7 @@ onMounted(async () => {
     credit: 'Esri World Imagery', minimumLevel: 0, maximumLevel: 19,
   }))
 
-  // COG 高光谱（已写入 WGS-84 地理参考，TIFFImageryProvider 自动正确定位）
+  // COG 高光谱（TIFFImageryProvider 默认加载，无地理参考时包裹全球）
   try {
     tiffProvider = await TIFFImageryProvider.fromUrl('/cog/final-cog.tif', {
       enablePickFeatures: true,
@@ -149,8 +149,37 @@ onMounted(async () => {
     setVisible: (v) => { if (modelDs) modelDs.show = v },
   })
 
-  // 点击 → 光谱曲线（TIFFImageryProvider.pickFeatures）
+  // 点击 → 控制点查询 / 光谱曲线
   viewer.screenSpaceEventHandler.setInputAction(async (click: any) => {
+    // 先尝试拾取实体（控制点）
+    const picked = viewer!.scene.pick(click.position)
+    if (Cesium.defined(picked) && picked.id && picked.id instanceof Cesium.Entity) {
+      const entity = picked.id
+      const pos = entity.position?.getValue(Cesium.JulianDate.now())
+      if (pos) {
+        const carto = Cesium.Cartographic.fromCartesian(pos)
+        const lon = Cesium.Math.toDegrees(carto.longitude)
+        const lat = Cesium.Math.toDegrees(carto.latitude)
+        const height = carto.height
+
+        // 判断控制点类型：有 properties.id 为模型控制点，否则为地表控制点
+        let id = ''
+        let type: '地表控制点' | '模型控制点' = '地表控制点'
+        if (entity.properties?.id) {
+          id = entity.properties.id.getValue()
+          type = '模型控制点'
+        } else if (entity.label?.text) {
+          id = entity.label.text.getValue()
+        }
+        store.controlPointInfo = { id, lon, lat, height, type }
+        return
+      }
+    }
+
+    // 没有拾取到实体 → 清空控制点弹窗
+    store.controlPointInfo = null
+
+    // 尝试光谱查询
     const cartesian = viewer!.camera.pickEllipsoid(click.position, viewer!.scene.globe.ellipsoid)
     if (!cartesian) { store.spectralData = null; return }
     const carto = Cesium.Cartographic.fromCartesian(cartesian)
