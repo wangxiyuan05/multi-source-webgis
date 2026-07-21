@@ -41,18 +41,13 @@ function refreshTiffLayer() {
   )
 }
 
-// ---------- 倾斜摄影模型 ENU 偏移（可调参数见面板） ----------
+// ---------- 倾斜摄影模型 ENU 偏移（固定值 -30, 20, 70） ----------
 
 function applyObliqueOffset(tileset: Cesium.Cesium3DTileset) {
-  const o = store.obliqueOffset
-  if (o.east === 0 && o.north === 0 && o.up === 0) {
-    tileset.modelMatrix = undefined as any
-    return
-  }
   const t = tileset.root.transform
   const origin = new Cesium.Cartesian3(t[12], t[13], t[14])
   const enu = Cesium.Transforms.eastNorthUpToFixedFrame(origin)
-  const local = new Cesium.Cartesian3(o.east, o.north, o.up)
+  const local = new Cesium.Cartesian3(-30, 20, 70)
   const absEcef = Cesium.Matrix4.multiplyByPoint(enu, local, new Cesium.Cartesian3())
   const originEcef = Cesium.Matrix4.multiplyByPoint(enu, Cesium.Cartesian3.ZERO, new Cesium.Cartesian3())
   const offsetEcef = Cesium.Cartesian3.subtract(absEcef, originEcef, new Cesium.Cartesian3())
@@ -330,12 +325,6 @@ watch(
 watch(
   () => [store.tiffOffset.lon, store.tiffOffset.lat, store.tiffOffset.gsd],
   () => { refreshTiffLayer() },
-)
-
-// 倾斜模型偏移变化
-watch(
-  () => [store.obliqueOffset.east, store.obliqueOffset.north, store.obliqueOffset.up],
-  () => { if (obliqueTileset) applyObliqueOffset(obliqueTileset) },
 )
 
 // ---------- 分屏对比 ----------
