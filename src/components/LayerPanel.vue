@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch, ref, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
-import { useMapStore, type LayerItem } from '../stores/mapStore'
+import { useMapStore, COLORSCALE_OPTIONS, type LayerItem } from '../stores/mapStore'
 
 const { store } = useMapStore()
 
@@ -135,6 +135,41 @@ function clearChart() {
         </button>
       </div>
       <div v-if="layers.length === 0" class="empty-hint">加载中...</div>
+    </div>
+
+    <!-- 高光谱渲染 -->
+    <div class="tiff-section">
+      <div class="tiff-header">高光谱渲染</div>
+      <div class="tiff-row">
+        <span class="tiff-label">波段</span>
+        <select v-model.number="store.tiff.band" class="tiff-control">
+          <option v-for="b in 151" :key="b" :value="b">{{ b }}</option>
+        </select>
+      </div>
+      <div class="tiff-row">
+        <span class="tiff-label">色带</span>
+        <select v-model="store.tiff.colorScale" class="tiff-control">
+          <option v-for="s in COLORSCALE_OPTIONS" :key="s" :value="s">{{ s }}</option>
+        </select>
+      </div>
+      <div class="tiff-row">
+        <span class="tiff-label">最小值</span>
+        <input
+          type="number"
+          v-model.number="store.tiff.domainMin"
+          class="tiff-control"
+          step="any"
+        />
+      </div>
+      <div class="tiff-row">
+        <span class="tiff-label">最大值</span>
+        <input
+          type="number"
+          v-model.number="store.tiff.domainMax"
+          class="tiff-control"
+          step="any"
+        />
+      </div>
     </div>
 
     <!-- 分屏对比 -->
@@ -305,6 +340,57 @@ function clearChart() {
   font-size: 13px;
   color: #999;
   text-align: center;
+}
+
+/* ---- TIFF render ---- */
+
+.tiff-section {
+  padding: 6px 14px 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  margin-top: 4px;
+}
+
+.tiff-header {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+.tiff-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.tiff-label {
+  font-size: 12px;
+  color: #666;
+  width: 44px;
+  flex-shrink: 0;
+}
+
+.tiff-control {
+  flex: 1;
+  padding: 3px 6px;
+  font-size: 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  outline: none;
+  transition: border-color 0.2s;
+  min-width: 0;
+}
+
+.tiff-control:focus {
+  border-color: #1890ff;
+}
+
+/* number input 右边箭头区域窄一点 */
+.tiff-control[type='number'] {
+  -moz-appearance: textfield;
 }
 
 /* ---- Split-screen ---- */

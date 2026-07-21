@@ -2,11 +2,12 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import * as Cesium from 'cesium'
 import TIFFImageryProvider from 'tiff-imagery-provider'
-import { getMapStore, type LayerItem } from '../stores/mapStore'
+import { getMapStore, COLORSCALE_OPTIONS, type LayerItem } from '../stores/mapStore'
 
 const mapContainer = ref<HTMLDivElement>()
 let viewer: Cesium.Viewer | null = null
 let tiffProvider: TIFFImageryProvider | null = null
+let tiffLayer: Cesium.ImageryLayer | null = null
 let obliqueTileset: Cesium.Cesium3DTileset | null = null
 let gsTileset: Cesium.Cesium3DTileset | null = null
 const store = getMapStore()
@@ -169,16 +170,20 @@ onMounted(async () => {
   viewer.imageryLayers.addImageryProvider(gaodeProvider)
 
   // 4. COGTiff 高光谱影像
-  let tiffLayer: Cesium.ImageryLayer | null = null
   try {
     tiffProvider = await TIFFImageryProvider.fromUrl('/cog/final-cog.tif', {
       enablePickFeatures: true,
       renderOptions: {
-        single: { band: 1, colorScale: 'viridis', domain: [0, 255] },
+        single: { band: 1, colorScale: 'viridis', domain: [0, 1] },
       },
     })
-    tiffLayer = viewer.imageryLayers.addImageryProvider(tiffProvider as unknown as Cesium.ImageryProvider)
-    const tifLayer_ = tiffLayer
+    // 读取实际波段统计值作为 domain 默认值
+    const b1 = tiffProvider.bands?.[1]
+    if (b1 && b1.min !== undefined && b1.max !== undefined) {
+      store.tiff.domainMin = b1.min
+      store.tiff.domainMax = b1.max
+    }
+    applyTiffRender()
     registerLayer({
       name: '高光谱影像',
       key: 'tiff',
@@ -188,7 +193,7 @@ onMounted(async () => {
       flyTo: () => {
         if (tiffProvider?.ready) viewer?.camera.flyToBoundingSphere(tiffProvider.rectangle as any)
       },
-      setVisible: (v) => { tifLayer_.show = v },
+      setVisible: (v) => { if (tiffLayer) tiffLayer.show = v },
     })
   } catch (err) {
     console.error('加载 COGTiff 失败:', err)
@@ -312,15 +317,41 @@ watch(() => store.splitMode, (enabled) => {
   const o = obliqueTileset as any
   const g = gsTileset as any
   if (enabled) {
-    o.splitDirection = -1   // 仅左侧显示
-    g.splitDirection = 1     // 仅右侧显示
+    o.splitDirection = -1
+    g.splitDirection = 1
     o.splitPosition = 0.5
     g.splitPosition = 0.5
   } else {
-    o.splitDirection = 0    // 两侧都显示
+    o.splitDirection = 0
     g.splitDirection = 0
   }
 })
+
+// ---------- 高光谱渲染参数 ----------
+
+function applyTiffRender() {
+  if (!viewer || !tiffProvider) return
+  const s = store.tiff
+  tiffProvider.renderOptions.single = {
+    band: s.band,
+    colorScale: s.colorScale as any,
+    domain: [s.domainMin, s.domainMax],
+  }
+  // 移除旧层并重建，清空缓存使新参数生效
+  const idx = tiffLayer ? viewer.imageryLayers.indexOf(tiffLayer) : -1
+  if (tiffLayer) {
+    viewer.imageryLayers.remove(tiffLayer)
+  }
+  tiffLayer = viewer.imageryLayers.addImageryProvider(
+    tiffProvider as unknown as Cesium.ImageryProvider,
+    idx >= 0 ? idx : undefined,
+  )
+}
+
+watch(
+  () => [store.tiff.band, store.tiff.colorScale, store.tiff.domainMin, store.tiff.domainMax],
+  () => { applyTiffRender() },
+)
 
 onUnmounted(() => {
   if (viewer) {
