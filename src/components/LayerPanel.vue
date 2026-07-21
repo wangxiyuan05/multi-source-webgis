@@ -137,6 +137,23 @@ function clearChart() {
       <div v-if="layers.length === 0" class="empty-hint">加载中...</div>
     </div>
 
+    <!-- 倾斜模型偏移 -->
+    <div class="tiff-section">
+      <div class="tiff-header">倾斜模型偏移（米）</div>
+      <div class="tiff-row">
+        <span class="tiff-label">东</span>
+        <input type="number" v-model.number="store.obliqueOffset.east" class="tiff-control" step="10" />
+      </div>
+      <div class="tiff-row">
+        <span class="tiff-label">北</span>
+        <input type="number" v-model.number="store.obliqueOffset.north" class="tiff-control" step="10" />
+      </div>
+      <div class="tiff-row">
+        <span class="tiff-label">天</span>
+        <input type="number" v-model.number="store.obliqueOffset.up" class="tiff-control" step="10" />
+      </div>
+    </div>
+
     <!-- 高光谱渲染 -->
     <div class="tiff-section">
       <div class="tiff-header">高光谱渲染</div>
