@@ -204,18 +204,6 @@ function clearChart() {
       </button>
     </div>
 
-    <!-- 分屏对比 -->
-    <div class="split-row">
-      <button
-        class="btn-split"
-        :class="{ active: store.splitMode }"
-        @click="store.splitMode = !store.splitMode"
-      >
-        <span class="split-icon">◫</span>
-        <span>{{ store.splitMode ? '关闭分屏' : '分屏对比' }}</span>
-      </button>
-    </div>
-
     <!-- 光谱曲线 -->
     <div v-if="spectral" class="spectral-section">
       <div class="spectral-header">
@@ -452,46 +440,6 @@ function clearChart() {
 
 .tiff-apply-btn:active {
   background: #096dd9;
-}
-
-/* ---- Split-screen ---- */
-
-.split-row {
-  padding: 6px 14px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  margin-top: 4px;
-}
-
-.btn-split {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  padding: 6px 0;
-  font-size: 13px;
-  border: 1px solid #d9d9d9;
-  background: #fff;
-  color: #666;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-split:hover {
-  border-color: #1890ff;
-  color: #1890ff;
-}
-
-.btn-split.active {
-  background: #1890ff;
-  border-color: #1890ff;
-  color: #fff;
-}
-
-.split-icon {
-  font-size: 16px;
-  line-height: 1;
 }
 
 /* ---- Spectral chart ---- */

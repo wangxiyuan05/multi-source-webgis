@@ -38,7 +38,6 @@ export interface MapStore {
   layers: LayerItem[]
   spectralData: SpectralData | null
   controlPointInfo: ControlPointInfo | null
-  splitMode: boolean
   tiff: TiffState
   /** COG 手动定位偏移（度），仅当 TIFF 无地理参考时生效 */
   tiffOffset: { lon: number; lat: number; gsd: number }
@@ -71,7 +70,6 @@ const store = reactive<MapStore>({
   layers: [],
   spectralData: null,
   controlPointInfo: null,
-  splitMode: false,
   tiff: {
     band: 1,
     colorScale: 'viridis',

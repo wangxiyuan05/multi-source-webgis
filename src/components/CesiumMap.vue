@@ -222,14 +222,6 @@ watch(() => store.tiffApplyVersion, async () => {
   } catch (err) { console.error('[TIFF] 重建失败:', err) }
 })
 
-// 分屏
-watch(() => store.splitMode, (enabled) => {
-  if (!obliqueTileset || !gsTileset) return
-  const o = obliqueTileset as any; const g = gsTileset as any
-  if (enabled) { o.splitDirection = -1; g.splitDirection = 1; o.splitPosition = 0.5; g.splitPosition = 0.5 }
-  else { o.splitDirection = 0; g.splitDirection = 0 }
-})
-
 onUnmounted(() => {
   if (viewer) { viewer.destroy(); store.viewer = null; store.layers.splice(0); viewer = null }
 })
