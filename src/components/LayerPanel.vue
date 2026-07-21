@@ -199,6 +199,9 @@ function clearChart() {
           title="像元大小（度/像素），默认 ~0.3m"
         />
       </div>
+      <button class="tiff-apply-btn" @click="store.tiffApplyVersion++">
+        应用渲染配置
+      </button>
     </div>
 
     <!-- 分屏对比 -->
@@ -426,6 +429,29 @@ function clearChart() {
   height: 1px;
   background: rgba(0, 0, 0, 0.06);
   margin: 6px 0;
+}
+
+.tiff-apply-btn {
+  display: block;
+  width: calc(100% - 28px);
+  margin: 8px 14px 0;
+  padding: 5px 0;
+  font-size: 12px;
+  border: 1px solid #1890ff;
+  background: #1890ff;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tiff-apply-btn:hover {
+  background: #40a9ff;
+  border-color: #40a9ff;
+}
+
+.tiff-apply-btn:active {
+  background: #096dd9;
 }
 
 /* ---- Split-screen ---- */

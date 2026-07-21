@@ -204,10 +204,22 @@ onMounted(async () => {
   ;(viewer.cesiumWidget.creditContainer as HTMLElement).style.display = 'none'
 })
 
-// 渲染参数
-watch(() => [store.tiff.band, store.tiff.colorScale, store.tiff.domainMin, store.tiff.domainMax], () => {
-  if (!tiffProvider) return
-  tiffProvider.renderOptions.single = { band: store.tiff.band, colorScale: store.tiff.colorScale as any, domain: [store.tiff.domainMin, store.tiff.domainMax] }
+// 高光谱应用渲染配置 — 重建 TIFFImageryProvider（不修改原始文件）
+watch(() => store.tiffApplyVersion, async () => {
+  if (!viewer) return
+  const s = store.tiff
+  // 移除旧图层和 provider
+  if (tiffLayer) { viewer.imageryLayers.remove(tiffLayer); tiffLayer = null }
+  if (tiffProvider) { tiffProvider.destroy(); tiffProvider = null }
+  // 用面板参数重建
+  try {
+    tiffProvider = await TIFFImageryProvider.fromUrl('/cog/final-cog.tif', {
+      enablePickFeatures: true,
+      renderOptions: { single: { band: s.band, colorScale: s.colorScale as any, domain: [s.domainMin, s.domainMax] } },
+    })
+    tiffLayer = viewer.imageryLayers.addImageryProvider(tiffProvider as unknown as Cesium.ImageryProvider)
+    console.log('[TIFF] 重建成功', s)
+  } catch (err) { console.error('[TIFF] 重建失败:', err) }
 })
 
 // 分屏

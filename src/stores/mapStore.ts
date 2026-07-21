@@ -42,6 +42,8 @@ export interface MapStore {
   tiff: TiffState
   /** COG 手动定位偏移（度），仅当 TIFF 无地理参考时生效 */
   tiffOffset: { lon: number; lat: number; gsd: number }
+  /** 递增时触发重新创建 TIFFImageryProvider */
+  tiffApplyVersion: number
 }
 
 export const COLORSCALE_OPTIONS = [
@@ -77,6 +79,7 @@ const store = reactive<MapStore>({
     domainMax: 1,
   },
   tiffOffset: { lon: 120.08, lat: 30.31, gsd: 0.0000027 },
+  tiffApplyVersion: 0,
 })
 
 export function useMapStore() {
