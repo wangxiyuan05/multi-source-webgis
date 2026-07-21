@@ -9,7 +9,8 @@ const mapContainer = ref<HTMLDivElement>()
 let viewer: Cesium.Viewer | null = null
 let tiffProvider: TIFFImageryProvider | null = null
 let tiffLayer: Cesium.ImageryLayer | null = null
-let geotiffReader: any = null  // 缓存 geotiff 读取器
+let geotiffReader: any = null
+let clickMarker: Cesium.Entity | null = null
 let obliqueTileset: Cesium.Cesium3DTileset | null = null
 let gsTileset: Cesium.Cesium3DTileset | null = null
 const store = getMapStore()
@@ -183,31 +184,49 @@ onMounted(async () => {
     // 没有拾取到实体 → 清空控制点弹窗
     store.controlPointInfo = null
 
-    // 光谱查询 — 用 geotiff 直接读取像素
+    // 光谱查询
     const cartesian = viewer!.camera.pickEllipsoid(click.position, viewer!.scene.globe.ellipsoid)
     if (!cartesian) { store.spectralData = null; return }
     const carto = Cesium.Cartographic.fromCartesian(cartesian)
     const lon = Cesium.Math.toDegrees(carto.longitude)
     const lat = Cesium.Math.toDegrees(carto.latitude)
 
+    // 红色点击标记（清除旧点）
+    if (clickMarker) { viewer!.entities.remove(clickMarker); clickMarker = null }
+    clickMarker = viewer!.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(lon, lat),
+      point: { color: Cesium.Color.RED, pixelSize: 12, outlineColor: Cesium.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      label: { text: `(${lon.toFixed(4)}, ${lat.toFixed(4)})`, font: '12px sans-serif', fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK, outlineWidth: 2, style: Cesium.LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cesium.Cartesian2(0, -20), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+    })
+
     if (!geotiffReader) { console.warn('[光谱] 读取器未就绪'); return }
     try {
       const image = await geotiffReader.getImage(0)
       const w = image.getWidth(), h = image.getHeight()
+      const tiffRect = tiffProvider?.rectangle
+      if (!tiffRect) return
 
-      // 像素坐标：TIFF 无地理参考，rectangle 为 (0, 0, 5509, 1306) 包裹全球
-      const px = ((lon % w) + w) % w
-      const py = ((lat % h) + h) % h
+      // 用 TIFFImageryProvider 的 rectangle 做映射（兼容无地理参考的包裹矩形）
+      const px = ((lon - tiffRect.west) / (tiffRect.east - tiffRect.west) % 1 + 1) % 1 * w
+      const py = ((lat - tiffRect.south) / (tiffRect.north - tiffRect.south) % 1 + 1) % 1 * h
 
-      // 一次读取全部波段（151 samples × 1 pixel）
-      const allRasters = await image.readRasters({ window: [px, py, px + 1, py + 1] })
+      const allRasters = await image.readRasters({ window: [Math.round(px), Math.round(py), Math.round(px) + 1, Math.round(py) + 1] })
       const bands = allRasters.map((_: any, i: number) => i + 1)
       const values = allRasters.map((r: Float32Array) => r[0])
-      const cur = store.tiff.band
-      const ci = bands.indexOf(cur)
-      store.spectralData = {
-        lon, lat, pixelX: Math.round(px), pixelY: Math.round(py),
-        currentValue: ci >= 0 ? values[ci] : values[0], bands, values,
+
+      // 有效数据检测
+      const allZero = values.every((v: number) => v === 0)
+      if (allZero) {
+        store.spectralData = { lon, lat, pixelX: Math.round(px), pixelY: Math.round(py), currentValue: 0, bands, values }
+        console.warn('[光谱] 该位置无有效高光谱像素', `(${Math.round(px)}, ${Math.round(py)})`)
+      } else {
+        const cur = store.tiff.band
+        const ci = bands.indexOf(cur)
+        store.spectralData = {
+          lon, lat, pixelX: Math.round(px), pixelY: Math.round(py),
+          currentValue: ci >= 0 ? values[ci] : values[0], bands, values,
+        }
+        console.log('[光谱]', lon.toFixed(4), lat.toFixed(4), `像素(${Math.round(px)},${Math.round(py)})`, `非零值${values.filter((v:number)=>v!==0).length}/151`)
       }
     } catch (err) { console.error('光谱点选失败:', err) }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK)

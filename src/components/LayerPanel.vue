@@ -215,7 +215,8 @@ function clearChart() {
         <div class="si-row"><span class="si-label">像素</span><span class="si-val">({{ spectral.pixelX }}, {{ spectral.pixelY }})</span></div>
         <div class="si-row"><span class="si-label">波段 {{ store.tiff.band }}</span><span class="si-val mono">{{ spectral.currentValue.toFixed(6) }}</span></div>
       </div>
-      <div ref="chartContainer" class="chart-box" />
+      <div v-if="spectral.values.every(v => v === 0)" class="spectral-nodata">该位置无有效高光谱像素</div>
+      <div v-else ref="chartContainer" class="chart-box" />
     </div>
     <div v-else class="spectral-section spectral-empty">
       <div ref="chartContainer" class="chart-box" />
@@ -523,6 +524,13 @@ function clearChart() {
 
 .si-val.mono {
   font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.spectral-nodata {
+  padding: 20px 14px;
+  text-align: center;
+  font-size: 12px;
+  color: #999;
 }
 
 .chart-box {
