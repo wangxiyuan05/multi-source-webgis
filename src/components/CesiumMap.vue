@@ -6,7 +6,8 @@ import { initCogReader, readBand, renderToCanvas, readPixelAllBands } from '../u
 
 const mapContainer = ref<HTMLDivElement>()
 let viewer: Cesium.Viewer | null = null
-let tiffLayer: Cesium.ImageryLayer | null = null
+let tiffEntity: Cesium.Entity | null = null
+let tiffRect: { west: number; south: number; east: number; north: number } | null = null
 let obliqueTileset: Cesium.Cesium3DTileset | null = null
 let gsTileset: Cesium.Cesium3DTileset | null = null
 const store = getMapStore()
@@ -137,32 +138,43 @@ async function loadModelGcp(tileset: Cesium.Cesium3DTileset): Promise<Cesium.Geo
   }
 }
 
-// ---------- 高光谱渲染 ----------
+// ---------- 高光谱渲染（用 Entity Rectangle + 影像材质） ----------
 
 async function applyTiffRender() {
   if (!viewer) return
   const s = store.tiff
   const rect = getTiffRect()
+  tiffRect = rect
 
-  // 读取当前波段数据
   const result = await readBand(s.band)
-  if (!result) return
-
-  // 渲染到 Canvas
-  const canvas = renderToCanvas(result.data, result.width, result.height, s.domainMin, s.domainMax, s.colorScale)
-
-  // 创建 SingleTileImageryProvider（严格 WGS84 坐标）
-  const provider = new Cesium.SingleTileImageryProvider({
-    url: canvas.toDataURL('image/png'),
-    rectangle: Cesium.Rectangle.fromDegrees(rect.west, rect.south, rect.east, rect.north),
-  })
-
-  // 替换旧图层
-  const idx = tiffLayer ? viewer.imageryLayers.indexOf(tiffLayer) : -1
-  if (tiffLayer) {
-    viewer.imageryLayers.remove(tiffLayer)
+  if (!result) {
+    console.warn('[COG] 无数据，跳过渲染')
+    return
   }
-  tiffLayer = viewer.imageryLayers.addImageryProvider(provider, idx >= 0 ? idx : undefined)
+
+  const canvas = renderToCanvas(result.data, result.width, result.height, s.domainMin, s.domainMax, s.colorScale)
+  if (!canvas) {
+    console.error('[COG] Canvas 渲染失败')
+    return
+  }
+
+  // 移除旧 entity
+  if (tiffEntity) {
+    viewer.entities.remove(tiffEntity)
+  }
+
+  // 创建新 entity（矩形贴地，WGS84 严格定位）
+  tiffEntity = viewer.entities.add({
+    rectangle: {
+      coordinates: Cesium.Rectangle.fromDegrees(rect.west, rect.south, rect.east, rect.north),
+      material: new Cesium.ImageMaterialProperty({
+        image: canvas.toDataURL('image/png'),
+        transparent: true,
+      }),
+      height: 0,
+    },
+  })
+  console.log('[COG] 渲染完成', JSON.stringify(rect))
 }
 
 // ---------- 生命周期 ----------
@@ -219,15 +231,16 @@ onMounted(async () => {
       loading: false,
       loaded: true,
       flyTo: () => {
-        const r = getTiffRect()
-        const dest = Cesium.Cartesian3.fromDegrees(
-          (r.west + r.east) / 2,
-          (r.north + r.south) / 2,
-          2000,
-        )
-        viewer?.camera.flyTo({ destination: dest })
+        if (tiffRect) {
+          const dest = Cesium.Cartesian3.fromDegrees(
+            (tiffRect.west + tiffRect.east) / 2,
+            (tiffRect.north + tiffRect.south) / 2,
+            2000,
+          )
+          viewer?.camera.flyTo({ destination: dest })
+        }
       },
-      setVisible: (v) => { if (tiffLayer) tiffLayer.show = v },
+      setVisible: (v) => { if (tiffEntity) tiffEntity.show = v },
     })
   } catch (err) {
     console.error('加载 COGTiff 失败:', err)
