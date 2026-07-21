@@ -202,15 +202,14 @@ onMounted(async () => {
   // 2. 清空默认图层
   viewer.imageryLayers.removeAll()
 
-  // 3. 高德卫星底图（Web Mercator）
-  const gaodeProvider = new Cesium.UrlTemplateImageryProvider({
-    url: 'https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
-    subdomains: ['1', '2', '3', '4'],
-    credit: '高德卫星影像',
+  // 3. Esri 卫星底图（WGS-84 / Web Mercator，与所有数据同一坐标系）
+  const baseProvider = new Cesium.UrlTemplateImageryProvider({
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    credit: 'Esri World Imagery',
     minimumLevel: 0,
-    maximumLevel: 18,
+    maximumLevel: 19,
   })
-  viewer.imageryLayers.addImageryProvider(gaodeProvider)
+  viewer.imageryLayers.addImageryProvider(baseProvider)
 
   // 4. COGTiff 高光谱影像（用 geotiff 读数据 + SingleTileImageryProvider 定位）
   try {
