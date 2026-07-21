@@ -154,20 +154,17 @@ onMounted(async () => {
 
   // 4. COGTiff 高光谱影像
   try {
+    // 必须传 domain，否则 provider 会尝试读取全分辨率数据计算统计值，
+    // 对于 151 波段的 3.4GB COG 会导致长时间挂死
     tiffProvider = await TIFFImageryProvider.fromUrl('/cog/final-cog.tif', {
       enablePickFeatures: true,
-      renderOptions: { single: { band: 1, colorScale: 'viridis' } },
+      renderOptions: {
+        single: { band: 1, colorScale: 'viridis', domain: [0, 0.05] },
+      },
     })
-    // 读取实际波段统计值
-    const b1 = tiffProvider.bands?.[1]
-    if (b1 && b1.min !== undefined && b1.max !== undefined) {
-      store.tiff.domainMin = b1.min
-      store.tiff.domainMax = b1.max
-    } else {
-      // 若无法读取统计，用默认 float 范围
-      store.tiff.domainMin = 0
-      store.tiff.domainMax = 0.05
-    }
+    // 保存默认 domain 到 store
+    store.tiff.domainMin = 0
+    store.tiff.domainMax = 0.05
     // 更新 renderOptions
     applyTiffRender()
     // 定位到模型区域
