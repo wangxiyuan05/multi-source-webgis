@@ -273,20 +273,48 @@ onMounted(async () => {
     setVisible: (v) => { if (gsTileset) gsTileset.show = v },
   })
 
-  // 7. 地表控制点（蓝色，WGS84 贴地）
-  const surfaceDs = await loadGeoJsonPoints(
-    '/geojson/surface-gcp.geojson',
-    Cesium.Color.ROYALBLUE,
-    '地表控制点',
-  )
+  // 7. 地表控制点（蓝色，WGS84 贴地）— 手动解析原始 JSON
+  let surfaceGcpDs: Cesium.CustomDataSource | null = null
+  try {
+    const resp = await fetch('/geojson/surface-gcp.json')
+    const json = await resp.json()
+    surfaceGcpDs = new Cesium.CustomDataSource('surface-gcp')
+    json.points.forEach((pt: any) => {
+      surfaceGcpDs!.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(pt.longitude, pt.latitude, pt.height || 0),
+        point: {
+          color: Cesium.Color.ROYALBLUE,
+          pixelSize: 12,
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        label: {
+          text: pt.id,
+          font: '12px sans-serif',
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset: new Cesium.Cartesian2(0, -18),
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      })
+    })
+    viewer.dataSources.add(surfaceGcpDs)
+  } catch (err) {
+    console.error('加载地表控制点失败:', err)
+  }
   registerLayer({
     name: '地表控制点',
     key: 'surface-gcp',
     visible: true,
     loading: false,
-    loaded: !!surfaceDs,
-    flyTo: () => { if (surfaceDs) viewer?.flyTo(surfaceDs) },
-    setVisible: (v) => { if (surfaceDs) surfaceDs.show = v },
+    loaded: !!surfaceGcpDs,
+    flyTo: () => { if (surfaceGcpDs) viewer?.flyTo(surfaceGcpDs) },
+    setVisible: (v) => { if (surfaceGcpDs) surfaceGcpDs.show = v },
   })
 
   // 8. 模型控制点（红色，经 3DGS 矩阵 → ECEF → WGS84 转换后贴地）
